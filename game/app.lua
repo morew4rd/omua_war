@@ -2,8 +2,8 @@
 
 tween = require "tween"
 
-W = 1024
-H= 1024
+W = 800
+H = 800
 NUM_STARS = 100
 EARTH_DIST = 180
 MOON_DIST = 40
