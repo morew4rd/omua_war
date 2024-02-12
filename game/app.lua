@@ -8,8 +8,10 @@ NUM_STARS = 100
 EARTH_DIST = 180
 MOON_DIST = 40
 MOON_ROT_SPEED = 3.1
-EARTH_ROT_SPEED = 2
+EARTH_ROT_SPEED = 1.5
 ENEMY_SPEED = 10
+ENEMY_W = 25
+ENEMY_H = 10
 
 first_game = true
 quit_game = false
@@ -29,7 +31,10 @@ game = {
 
     rotation_dir = -1, -- -1 or 1. rotation direction
 
-    state = "menu", -- "gameplay" "menu"
+    state = "menu", -- "gameplay" "menu"  "dead"
+
+    points = 0,
+    health = 100,
 
     tweens = {},
 
@@ -52,8 +57,11 @@ function reset_game()
     end
 
     game.enemies = {}
+    game.points = 0
+    game.health = 10
+
     --temp
-    for i=1,100 do
+    for i=1,60 do
         add_enemy()
     end
 end
@@ -83,14 +91,19 @@ function draw_moon()
 end
 
 function draw_enemies()
-    lyte.set_color(0.7,0.7,0.7,0.5)
     for i=1, #game.enemies do
         local enemy = game.enemies[i]
 
+        if enemy.alive then
+            lyte.set_color(0.7,0.7,0.7,0.5)
+        else
+            lyte.set_color(1,0,0,0.8)
+        end
+
         lyte.push_matrix()
-        lyte.translate(enemy.x, enemy.y)
+        lyte.translate(enemy.x-ENEMY_W/2, enemy.y-ENEMY_H/2)
         lyte.rotate(enemy.angle)
-        lyte.draw_rect(0, 0, 20, 6)
+        lyte.draw_rect(0,0, ENEMY_W, ENEMY_H)
         lyte.pop_matrix()
     end
 end
@@ -125,6 +138,14 @@ function draw_game()
     draw_moon()
     lyte.pop_matrix()
 
+    local points = "Frags: " .. game.points
+    local health = "Sun Health: " .. game.health
+
+    local pts_w = lyte.get_text_width(points)
+    local hlt_w = lyte.get_text_width(health)
+    lyte.draw_text(points, W/2-pts_w/2, 5)
+    lyte.draw_text(health, W/2-hlt_w/2, 5+16+5)
+
 end
 
 function draw_menu()
@@ -146,9 +167,17 @@ function draw_menu()
     lyte.draw_text(line, -2, 16-1)
     lyte.pop_matrix()
 
-    if not first_game then lyte.draw_text("[Esc] Continue", W/2-w, H/2) end
-    lyte.draw_text("[N]   New Game", W/2-w, H/2 + 16*2)
-    lyte.draw_text("[Q]   Quit", W/2-w, H/2 + 16*4)
+    if not first_game then lyte.draw_text("[Esc] Continue", W/2-w, H/2 + 16*2) end
+    lyte.draw_text("[N]   New Game", W/2-w, H/2 + 16*4)
+    lyte.draw_text("[Q]   Quit", W/2-w, H/2 + 16*6)
+end
+
+function draw_dead()
+    local text = "It's over: Sun's dead  "
+    local text_w = lyte.get_text_width(text)
+    lyte.set_color(1,0,0,1)
+    lyte.draw_text(text, W/2-text_w/2, H/2 + 16*2)
+
 end
 
 function draw_bye(w,h)
@@ -158,22 +187,79 @@ function draw_bye(w,h)
 end
 
 function add_enemy()
-    local x = math.random(10, W-10)
-    local y = math.random(10, H-10)
-    local angle = math.atan2(game.sun.y - y, game.sun.x - x)
+    -- local x = math.random(10, W-10)
+    -- local y = math.random(10, H-10)
+    -- local angle = math.atan2(game.sun.y - y, game.sun.x - x)
+    local angle = math.random()*math.pi*2
+    local dist = math.random(100,500)
+    local x = - math.sin(angle)*dist + game.sun.x
+    local y = - math.cos(angle)*dist + game.sun.y
+    angle = math.atan2(game.sun.y - y, game.sun.x - x)
 
-    table.insert(game.enemies, { x = x, y = y, angle = angle, })
+    table.insert(game.enemies, { x = x, y = y, angle = angle, alive = true })
 end
 
-function fire_moon()
-    game.moon.angle = game.earth.angle
-    game.moon.dist = game.moon.dist + 100
-    game.tweens.moon_return = tween.new(0.4, game.moon, {dist=MOON_DIST}, tween.easing.outQuad)
+function fire_moon(N, dir)
+    dir = dir or 1
+    if dir == 1 then
+        game.moon.angle = game.earth.angle
+    else
+        game.moon.angle =  game.earth.angle - math.pi
+    end
+    game.moon.dist = game.moon.dist + N
+    game.tweens.moon_return = tween.new(0.5, game.moon, {dist=MOON_DIST}, tween.easing.outQuad)
+end
+
+function point_in_circle(px, py, cx, cy, cr)
+    dx = math.abs(px - cx)
+    dy = math.abs(py - cy)
+    if dx*dx + dy*dy < cr*cr then
+        return true
+    else
+        return false
+    end
 end
 
 function check_collisions()
+    local sx = game.sun.x
+    local sy = game.sun.y
+    local sr = game.sun.r
+    local ex = sx + game.earth.dx
+    local ey = sy + game.earth.dy
+    local er = game.earth.r
+    local mx = ex + game.moon.dx
+    local my = ey + game.moon.dy
+    local mr = game.moon.r * 2
+
     for i=1, #game.enemies do
         local e = game.enemies[i]
+        -- local ang = e.angle
+        local minx = e.x - (ENEMY_W)
+        local maxx = e.x + (ENEMY_W)
+        local miny = e.y - (ENEMY_W)
+        local maxy = e.y + (ENEMY_W)
+        -- with moon
+        if  e.alive and
+            (   point_in_circle(minx, miny, mx, my, mr)
+            or  point_in_circle(minx, maxy, mx, my, mr)
+            or  point_in_circle(maxx, miny, mx, my, mr)
+            or  point_in_circle(maxx, maxy, mx, my, mr))
+        then
+            e.alive = false
+            game.points = game.points + 1
+        end
+        -- with sun
+        if  e.alive and
+            (   point_in_circle(minx, miny, sx, sy, sr)
+            or  point_in_circle(minx, maxy, sx, sy, sr)
+            or  point_in_circle(maxx, miny, sx, sy, sr)
+            or  point_in_circle(maxx, maxy, sx, sy, sr))
+        then
+            e.alive = false
+            game.health = game.health - 10
+            if game.health < 0 then game.health = 0 end
+        end
+
     end
 end
 
@@ -198,6 +284,8 @@ function update_game(dt)
     update_enemies(dt)
     check_collisions()
 
+    if game.health == 0 then game.state = "dead"; first_game = true end
+
     local d_angle = dt*EARTH_ROT_SPEED
     local d_dist = 100*dt
 
@@ -205,13 +293,17 @@ function update_game(dt)
 
     if lyte.is_key_down("left") then game.rotation_dir = -1; game.earth.angle = game.earth.angle - d_angle end
     if lyte.is_key_down("right") then game.rotation_dir = 1; game.earth.angle = game.earth.angle + d_angle end
-    if lyte.is_key_pressed("up") then fire_moon() end
+    if lyte.is_key_down("up") then fire_moon(dt*60*12, 1) end
+    if lyte.is_key_down("down") then fire_moon(dt*60*4, -1) end
 
     if lyte.is_key_pressed("escape") then game.state = "menu" end
 end
 
 function update_menu(dt)
-    if lyte.is_key_pressed("escape") then game.state = "gameplay"; first_game = false end
+    if lyte.is_key_pressed("escape") then
+        if game.state == "dead" then reset_game() end
+        game.state = "gameplay"; first_game = false
+    end
     if lyte.is_key_pressed("n") then reset_game(); game.state = "gameplay"; first_game = false end
     if lyte.is_key_pressed("q") then quit_game = true end
 end
@@ -223,19 +315,20 @@ function lyte.tick(dt, w, h, rs)
 
     if quit_game then -- lyte.quit on WASM is a no-op, so we show a message
         draw_bye(w,h)
-        -- lyte.quit()
+        lyte.quit()
         return
     end
 
     -- state specific updates
-    if      game.state == "menu"        then update_menu(dt)
-    elseif  game.state == "gameplay"    then update_game(dt)
+    if      game.state == "menu" or game.state == "dead"       then update_menu(dt)
+    elseif  game.state == "gameplay"                           then update_game(dt)
     end
 
     -- draw game to canvas
     lyte.set_canvas(canvas)
     draw_game()
     if game.state == "menu" then draw_menu() end
+    if game.state == "dead" then draw_menu(); draw_dead() end
     lyte.reset_color()
     lyte.reset_canvas()
 
@@ -245,7 +338,7 @@ function lyte.tick(dt, w, h, rs)
     lyte.draw_image(canvas, 0, 0)
 
     -- debug overlay
-    lyte.draw_text("FPS: " .. 1/dt, 0, 0)
+    -- lyte.draw_text("FPS: " .. 1/dt, 0, 0)
 end
 
 
