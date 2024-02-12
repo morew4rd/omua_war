@@ -58,11 +58,13 @@ function reset_game()
 
     game.enemies = {}
     game.points = 0
-    game.health = 10
+    game.health = 100
 
     --temp
     for i=1,60 do
-        add_enemy()
+        local e = {}
+        repave_enemy(e)
+        game.enemies[i] = e
     end
 end
 
@@ -139,7 +141,7 @@ function draw_game()
     lyte.pop_matrix()
 
     local points = "Frags: " .. game.points
-    local health = "Sun Health: " .. game.health
+    local health = "Sun Health: " .. game.health .. "%"
 
     local pts_w = lyte.get_text_width(points)
     local hlt_w = lyte.get_text_width(health)
@@ -186,17 +188,19 @@ function draw_bye(w,h)
         lyte.draw_text("bye! <3", w/2-30,h/2)
 end
 
-function add_enemy()
-    -- local x = math.random(10, W-10)
-    -- local y = math.random(10, H-10)
-    -- local angle = math.atan2(game.sun.y - y, game.sun.x - x)
+function repave_enemy(enemy)
     local angle = math.random()*math.pi*2
-    local dist = math.random(100,500)
+    local dist = math.random(500,600)
     local x = - math.sin(angle)*dist + game.sun.x
     local y = - math.cos(angle)*dist + game.sun.y
-    angle = math.atan2(game.sun.y - y, game.sun.x - x)
 
-    table.insert(game.enemies, { x = x, y = y, angle = angle, alive = true })
+    -- angle towards sun
+    angle = math.atan2(game.sun.y - y, game.sun.x - x)
+    enemy.x = x
+    enemy.y = y
+    enemy.angle = angle
+    enemy.alive = true
+    -- table.insert(game.enemies, { x = x, y = y, angle = angle, alive = true })
 end
 
 function fire_moon(N, dir)
@@ -264,6 +268,12 @@ function check_collisions()
 end
 
 function update_enemies(dt)
+    for i=1, #game.enemies do
+        local e = game.enemies[i]
+        if not e.alive then
+            repave_enemy(e)
+        end
+    end
     for i=1, #game.enemies do
         local e = game.enemies[i]
         e.y = e.y + math.sin(e.angle) * dt * ENEMY_SPEED
